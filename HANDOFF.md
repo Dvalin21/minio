@@ -104,42 +104,43 @@ same commit appeared in both the pending and the skipped table.*
 | `ba3c0fd1c` Go 1.24.8 toolchain | Dockerfile pins the Go version |
 | `ae71d7690`, `756f3c814`, `456d9462e` | Clustering — single-node only |
 
-## Known-unpatched CVEs (mitigated at the proxy, not fixed here)
+## CVE-2026-40344 and CVE-2026-41145 — now fixed locally
 
-These affect **every** open-source MinIO release including ours, and
-`Patched versions: None` — the fix ships only in commercial MinIO AIStor.
+Both were open in the base tag. `first_patched_version` is `None` for both:
+upstream is archived, so no patched open-source release exists or ever will.
+The fix ships only in commercial MinIO AIStor `RELEASE.2026-04-11`.
 
-| CVE | Impact |
+They are now fixed by `05-cve-2026-40344-2026-41145.patch`, which lives in the
+sync-server repository. This repository's code is not built any more, so
+nothing here is patched — the patch series is the current state.
+
+| CVE | CWE | Defect | Fix |
+|---|---|---|---|
+| CVE-2026-40344 | CWE-306 | `PutObjectExtractHandler` had no `case authTypeStreamingUnsignedTrailer` and no `default`, so the request fell through with no signature verification at all | added the missing case |
+| CVE-2026-41145 | CWE-287 | Both put handlers gated verification on `r.Header.Get(xhttp.Authorization) != ""` while `isPutActionAllowed` also accepts `X-Amz-Credential` from the query string | gate now also consults the query parameter |
+
+Verified with a live exploit against both binaries rather than by reading the
+diff. On the unpatched build, with a bucket-scoped key and a signature of all
+zeros, both writes succeeded and a tar was extracted into the bucket. On the
+patched build both are rejected, and a legitimate signed upload still works.
+
+MinIO's own suite for the touched paths passes on the patched tree.
+
+### The load-balancer rule is still worth keeping
+
+`Caddyfile` in the sync-server repository rejects
+`X-Amz-Content-Sha256: STREAMING-UNSIGNED-PAYLOAD-TRAILER` with 403. That rule
+is now defence in depth rather than the primary control. It is also still the
+only thing standing between a *future* MinIO vulnerability and an internet
+facing object store, so it should not be removed on the grounds that the known
+CVEs are fixed.
+
+**Not fixed, deliberately, and not applicable here:**
+
+| CVE | Why |
 |---|---|
-| **CVE-2026-40344** / GHSA-9c4q-hq6p-c237 | Anyone with a valid **access key** can write arbitrary objects with no secret key and a fabricated signature. |
-| **CVE-2026-41145** / GHSA-hv4r-mvr4-25vw | Same class, via query-string credentials. |
-| CVE-2026-33322 | OIDC JWT algorithm confusion. **Not applicable** — OIDC is not enabled. |
-| GHSA-xh8f-g2qw-gcm7, CVE-2023-28432 | Cluster-only. **Not applicable** — single node. |
-
-**Scoring note.** An earlier revision of this file cited CVSS 8.8 for
-CVE-2026-40344 without saying which version. Both numbers are real and both are
-HIGH — NVD carries `cvssMetricV40: 8.8` and `cvssMetricV31: 8.2`, while
-GitHub's advisory API shows 8.2 because it reports the v3.1 figure. Cite the
-version when quoting a score. CVE-2026-41145 is 8.2 on both.
-
-Verified present in this source tree:
-`cmd/object-handlers.go` gates signature verification on the *presence* of an
-`Authorization` header while `isPutActionAllowed` trusts the `X-Amz-Credential`
-**query parameter**; and `PutObjectExtractHandler`'s switch has no
-`case authTypeStreamingUnsignedTrailer`, so it falls through unverified.
-
-**Mitigation lives in the sync-server stack's `Caddyfile`**, which rejects
-`X-Amz-Content-Sha256: STREAMING-UNSIGNED-PAYLOAD-TRAILER` with 403 and
-redacts the S3 presigning parameters from the access log. See
-`Dvalin21/notesnook-sync-server` → *MinIO / S3*. Do not remove those without
-replacing them.
-
-The rule was confirmed against the running stack, and confirmed to be *the load
-balancer's* response rather than MinIO's: a `PUT` carrying the trailer header
-returns `403` with no `content-type` and `content-length: 0` (Caddy's
-`respond`), whereas the same `PUT` without the header returns `403` with
-`content-type: application/xml` (MinIO's own signature rejection). Two
-different layers, two different error shapes.
+| CVE-2026-33322 | OIDC JWT algorithm confusion. OIDC is not enabled. |
+| GHSA-xh8f-g2qw-gcm7, CVE-2023-28432 | Cluster-only. Single node. |
 
 ## Provenance
 

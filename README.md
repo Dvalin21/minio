@@ -51,27 +51,31 @@ changes survives independently of this repository. See
 [`patches/README.md`](patches/README.md) for the exact application procedure
 and for the upstream commits deliberately *not* ported.
 
-## Known-unpatched vulnerabilities
+## Known vulnerabilities
 
-**These are not fixed, and they cannot be.** Upstream is archived; the fixes ship
-only in the commercial product. Anyone reading only this file needs to know
-that.
+**Both published CVEs are fixed locally.** `CVE-2026-40344` (CWE-306) and
+`CVE-2026-41145` (CWE-287) are open in the pinned base — `first_patched_version`
+is `None` for both, upstream is archived, and the fix ships only in commercial
+MinIO AIStor. The fifth patch in `patches/` closes them. See
+[`HANDOFF.md`](HANDOFF.md) for the detail and for how the fix was verified.
 
-| CVE | Impact | Patched versions |
+| CVE | Defect | State |
 |---|---|---|
-| [CVE-2026-40344](https://github.com/minio/minio/security/advisories/GHSA-9c4q-hq6p-c237) (CVSS 8.8 v4.0 / 8.2 v3.1) | A caller with a valid **access key** can write arbitrary objects using a fabricated signature | None (open source) |
-| [CVE-2026-41145](https://github.com/minio/minio/security/advisories/GHSA-hv4r-mvr4-25vw) (CVSS 8.2) | Same class, via query-string credentials | None (open source) |
-| CVE-2026-33322 | OIDC JWT algorithm confusion | **Not applicable** — OIDC is not enabled |
-| CVE-2023-28432, GHSA-xh8f-g2qw-gcm7 | Cluster-only | **Not applicable** — single node |
+| [CVE-2026-40344](https://github.com/minio/minio/security/advisories/GHSA-9c4q-hq6p-c237) | `PutObjectExtractHandler` had no case for the unsigned-trailer auth type and no `default`, so requests fell through with no signature verification | Fixed by patch 05 |
+| [CVE-2026-41145](https://github.com/minio/minio/security/advisories/GHSA-hv4r-mvr4-25vw) | Signature verification was gated on the `Authorization` header while credentials were also accepted from the query string | Fixed by patch 05 |
 
-Both advisories name a load-balancer rule as the mitigation. In this stack that
-rule lives in the reverse-proxy configuration of the Notesnook sync server
-repository — a `403` on `X-Amz-Content-Sha256: STREAMING-UNSIGNED-PAYLOAD-TRAILER`
-at the object-storage route, plus presigning parameters redacted from the access
-log. **The mitigation is the load balancer, not this image.** Anything that
-reaches the object store without traversing that rule is unmitigated.
+Known and **not** fixed, because they do not apply to a single-node deployment
+without OIDC:
 
-Do not read the four patches above as covering any of this.
+| CVE | Why not applicable |
+|---|---|
+| CVE-2026-33322 | OIDC JWT algorithm confusion — OIDC is not enabled. |
+| GHSA-xh8f-g2qw-gcm7, CVE-2023-28432 | Cluster-only — single node. |
+
+The stack additionally blocks the unsigned-trailer header at its
+reverse-proxy, which is defence in depth now that the binary is fixed. It
+should not be removed: it is the only control standing between a *future* MinIO
+vulnerability and an internet-facing object store.
 
 ## Building
 
