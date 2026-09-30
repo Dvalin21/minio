@@ -11,7 +11,7 @@ Published as `dvalin21/minio-notesnook:latest`.
 
 | Branch | Base | Purpose |
 |--------|------|---------|
-| `minio-notesnook` | `RELEASE.2025-09-07T16-13-09Z` (`07c3a429b`) | **Production, and the only branch in this repository.** Pinned release + 4 forward-ported security fixes. |
+| `minio-notesnook` | `RELEASE.2025-09-07T16-13-09Z` (`07c3a429b`) | **Production, and the only branch in this repository.** |
 
 **Correction to an earlier revision of this file.** It listed a `master`
 branch as an untouched upstream mirror and a `minio-full-ui` branch for
@@ -23,17 +23,63 @@ git ls-remote --heads https://github.com/Dvalin21/minio.git
 ```
 
 `minio/minio` is **archived and read-only** — confirmed via the GitHub API
-(`archived: true`), last push `2026-04-24T17:54:39Z`. So upstream will never
-ship another release. The pinned base is therefore permanent; the only way this
-gets a security fix is by porting it here.
+(`archived: true`), last push `2026-04-24T17:54:39Z`. Upstream will never ship
+another release, so the pinned base is permanent and the only way this gets a
+fix is by porting it here.
 
-### Tags are the remaining impersonation risk
+## This repository no longer builds the image
 
-This repository still carries **1,036 upstream `RELEASE.*` tags**, spanning
-`RELEASE.2016-03-11T03-45-50Z` onward, and it is still a GitHub *fork* of
-`minio/minio` (API: `fork: true`, parent `minio/minio`). Combined, that makes
-it easy to mistake for official MinIO. Removing the tags and the fork relation
-is outstanding work — see [Decoupling](#decoupling-status).
+The build moved to `Dvalin21/notesnook-sync-server` → `minio/Dockerfile`. It
+clones **upstream `minio/minio`** at the base tag and applies the four patches
+from its own `patches/` directory. It does **not** reference this repository.
+
+Equivalence was proven, not assumed. Cloning the base tag, applying the four
+patches, and diffing the entire tree against this branch:
+
+```
+.go files differing : 0
+non-.go differing   : only README.md, HANDOFF.md, patches/*
+```
+
+Zero Go differences means an identical binary. The published image now reports
+the upstream base commit rather than a commit from this repository:
+
+```
+minio version notesnook.2025-09-07T16-13-09Z (commit-id=07c3a429bfed433e49018cb0f78a52145d4bedeb)
+```
+
+What remains here is the record: the patch files, this file, and the README.
+
+### Tags removed
+
+The 524 upstream tags are gone. This repository carried **525 tag names**; an
+earlier revision of this file said 1,036, which was wrong — that figure counted
+annotated tags twice, once for the tag object and once for its `^{}` peeled
+commit.
+
+| Removed | Count | Why |
+|---|---|---|
+| `RELEASE.*` | 522 | Upstream release names. A tag reading `RELEASE.<date>` implies an official build. |
+| `OFFICIAL.2016-02-08T00-12-28Z` | 1 | Upstream's. |
+| `release-1434511043` | 1 | Upstream's, non-standard name. |
+| `RELEASE.2026-09-02T00-00-00Z` | 1 | **Never a MinIO release.** Peels to `fa64b2cdad29`, "docs: add HANDOFF.md", one file changed. Local tag impersonating a release. |
+| **Kept:** `archive-minio-full-ui` | 1 | Ours. Points at `c0f77865f`, preserving a branch that no longer exists. Not impersonation, and it is the only reference to that work. |
+
+Of the 524 removed, 523 existed verbatim in upstream `minio/minio`; the one that
+did not was the fake `RELEASE.2026-09-02T00-00-00Z`. The full pre-deletion tag
+list is preserved in `.deleted-tags-manifest.txt` at the tip of this branch, so
+a restore is possible if one is ever wanted.
+
+Tag deletion did not affect the build, and that was verified rather than
+assumed: the image was rebuilt from the same pinned commit afterwards and
+produced the same stamp. Tags are not needed to resolve a commit.
+
+### Still outstanding: the fork relationship
+
+This repository is still a GitHub **fork** of `minio/minio`, so the "forked
+from" banner remains. GitHub has no unfork operation, so removing it means
+creating a new non-fork repository and repointing references — a decision with
+a URL change attached, not a mechanical change. Not done.
 
 ## Patches applied
 
@@ -168,39 +214,32 @@ Expect the version string to name the commit, not `DEVELOPMENT.GOGET`.
 
 ## Decoupling status
 
-The goal is for this repository to hold **only** the local changes, with
-upstream `minio/minio` demoted to a pinned build input rather than a parent
-repository.
+**Done**, apart from one item that needs a decision.
 
-**Feasibility is proven.** Cloning upstream at the base tag and applying the
-four patches reproduces this branch's Go tree exactly:
+The goal was for the build to depend only on the local changes, with upstream
+as a pinned input rather than a parent repository. That is achieved:
 
-```bash
-git clone --depth 1 --branch RELEASE.2025-09-07T16-13-09Z https://github.com/minio/minio.git base
-cd base && git am ../patches/*.patch     # applies 4/4 cleanly
-git diff --name-only FETCH_HEAD HEAD -- '*.go'   # 0 files
-```
+| Step | State |
+|---|---|
+| Move the four patches to the sync-server repo | **Done.** Byte-identical copies, md5-verified. |
+| Retarget the build at `minio/minio` + `git am patches/*.patch` | **Done.** No fork reference remains in the build. |
+| Prove the result is the same binary | **Done.** Full-tree diff: 0 `.go` files differ. |
+| Delete the 524 upstream tags | **Done.** 525 names → 1. Manifest kept. |
+| Drop the fork relationship | **Outstanding — needs a decision.** |
 
-All four apply with no fuzz and no manual intervention, and the result is
-byte-identical to `minio-notesnook` across every `.go` file. So upstream base
-plus 17 KB of patch files *is* this branch. The module path is
-`github.com/minio/minio` in both, which matters because the `-X` stamp targets
-depend on it.
+The last one is not mechanical. GitHub provides no unfork operation, so
+removing the "forked from minio/minio" banner requires creating a new
+non-fork repository and repointing every reference to this URL. That is a URL
+change with a decision attached, so it has not been done unilaterally.
 
-**Outstanding:**
+### Slimming the tree: no longer necessary
 
-1. Delete the 1,036 upstream `RELEASE.*` tags and the fake
-   `RELEASE.2026-09-02T00-00-00Z`.
-2. Drop the fork relationship to `minio/minio`.
-3. Retarget `minio/Dockerfile`'s `MINIO_REPO` at `minio/minio`, check out the
-   base tag, and `git am patches/*.patch`.
-4. Optionally slim the tree — 28.4 MB of its 36.2 MB is `cmd/testdata` and
-   `docs/`, none of which is needed to build the server.
-
-**Do steps 1–3 without moving `MINIO_COMMIT` and the pin breaks.** The current
-Dockerfile checks out `3b2d2032457ef75ae29cdb171d9e1d5004082c75` from this
-repository. Any history rewrite that removes that commit breaks the build
-immediately. Retarget the Dockerfile in the same change that removes the commit.
+An earlier plan proposed deleting `cmd/testdata` and `docs/` to cut this
+repository from 36 MB to 8 MB. **That work is now moot and should not be
+done.** Nothing is vendored: the build clones upstream itself, so this
+repository's tree size has no effect on the build, the image, or build time
+beyond a slower `git clone`. For reference, `cmd/testdata` and `docs/` are
+28.4 MB of the 36.2 MB, and a 9.1 MB test fixture is the single largest file.
 
 ## Personal data
 
