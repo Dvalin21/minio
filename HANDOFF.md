@@ -19,7 +19,7 @@ reference. **Neither exists.** Verified against the remote:
 
 ```bash
 git ls-remote --heads https://github.com/Dvalin21/minio.git
-# 3b2d2032457ef75ae29cdb171d9e1d5004082c75	refs/heads/minio-notesnook
+# 7590fe395c1558b5bd87d4fabec4d1332ef3d4fc	refs/heads/minio-notesnook
 ```
 
 `minio/minio` is **archived and read-only** — confirmed via the GitHub API
@@ -30,19 +30,35 @@ fix is by porting it here.
 ## This repository no longer builds the image
 
 The build moved to `Dvalin21/notesnook-sync-server` → `minio/Dockerfile`. It
-clones **upstream `minio/minio`** at the base tag and applies the four patches
+clones **upstream `minio/minio`** at the base tag and applies **five** patches
 from its own `patches/` directory. It does **not** reference this repository.
 
-Equivalence was proven, not assumed. Cloning the base tag, applying the four
-patches, and diffing the entire tree against this branch:
+Four of those are the functional patches kept here in `patches/`. The fifth is
+`05-cve-2026-40344-2026-41145.patch`, which lives only in the sync-server
+repository because it is a security fix and this branch is not built. Note the
+asymmetry: **`patches/` in this repository holds four files, the applied series
+is five.** The count is not interchangeable, and the image that ships is the
+five-patch build.
+
+Equivalence of the *functional* series was proven, not assumed. Cloning the
+base tag, applying the four functional patches, and diffing the entire tree
+against this branch:
 
 ```
 .go files differing : 0
 non-.go differing   : only README.md, HANDOFF.md, patches/*
 ```
 
-Zero Go differences means an identical binary. The published image now reports
-the upstream base commit rather than a commit from this repository:
+Zero Go differences means an identical binary **for that four-patch build**.
+The shipped image is no longer byte-identical to this branch, because it adds
+the CVE patch on top — verified by searching this branch for either CVE
+identifier and getting zero matches, so this branch carries neither fix. Do not
+read the table above as a statement that this branch equals the image.
+
+Because the base is cloned rather than committed, the image reports the
+upstream base commit rather than any commit from this repository — which is
+the quickest way to tell at a glance that you are running the decoupled
+build:
 
 ```
 minio version notesnook.2025-09-07T16-13-09Z (commit-id=07c3a429bfed433e49018cb0f78a52145d4bedeb)
